@@ -17,6 +17,24 @@ class OllamaError(RuntimeError):
     pass
 
 
+def _display_markdown_notebook(text: str, display_id: str | None = None) -> str | None:
+    """
+    Best-effort Markdown rendering in notebook environments.
+    Returns a display_id when creating a new display handle, else None.
+    """
+    try:
+        from IPython.display import Markdown, display, update_display
+    except Exception:
+        return None
+
+    if display_id is None:
+        handle = display(Markdown(text), display_id=True)
+        return getattr(handle, "display_id", None)
+
+    update_display(Markdown(text), display_id=display_id)
+    return display_id
+
+
 def _normalize_openai_base_url(base_url: str) -> str:
     cleaned = base_url.rstrip("/")
     if cleaned.endswith("/v1"):
@@ -38,9 +56,11 @@ def chat_with_ollama(
     temperature: Optional[float] = None,
     top_p: Optional[float] = None,
     max_tokens: Optional[int] = None,
-    timeout: float = 120.0,
+    timeout: float = 180.0,
     response_format: Optional[dict[str, Any]] = None,
-    stream: bool = False,
+    stream: bool = True,
+    stream_to_stdout: bool = True,
+    render_markdown: bool = True,
     options: Optional[dict[str, Any]] = None,
 ) -> Any:
     """
@@ -83,6 +103,16 @@ def chat_with_ollama(
     stream:
         If True, returns an iterable of streaming chunks.
         If False (default), returns a single assistant string.
+
+    stream_to_stdout:
+        Stream output control when stream=True and render_markdown=False:
+        - True: print streamed tokens and return None
+        - False: return raw stream iterator
+
+    render_markdown:
+        If True (default), render responses as Markdown in notebook environments.
+        For stream=True, this enables live Markdown updates and returns None.
+        This takes priority over stream_to_stdout.
     """
     final_model = model or DEFAULT_OLLAMA_MODEL
     if not final_model:
@@ -125,10 +155,46 @@ def chat_with_ollama(
         raise OllamaError(f"Ollama request failed: {exc}") from exc
 
     if stream:
+        if stream_to_stdout is False:
+            return completion
+
+        if render_markdown:
+            streamed_text = ""
+            display_id: str | None = _display_markdown_notebook("")
+            for chunk in completion:
+                delta = ""
+                if chunk.choices and chunk.choices[0].delta:
+                    delta = chunk.choices[0].delta.content or ""
+                if delta:
+                    streamed_text += delta
+                    if display_id is not None:
+                        _display_markdown_notebook(streamed_text, display_id=display_id)
+                    else:
+                        print(delta, end="", flush=True)
+            if display_id is None:
+                print()
+            return None
+
+        if stream_to_stdout is True:
+            for chunk in completion:
+                delta = ""
+                if chunk.choices and chunk.choices[0].delta:
+                    delta = chunk.choices[0].delta.content or ""
+                if delta:
+                    print(delta, end="", flush=True)
+            print()
+            return None
+
         return completion
 
     try:
-        return completion.choices[0].message.content or ""
+        response_text = completion.choices[0].message.content or ""
+        if render_markdown:
+            display_id = _display_markdown_notebook(response_text)
+            if display_id is None:
+                print(response_text)
+            return None
+        return response_text
     except (AttributeError, IndexError, TypeError) as exc:
         raise OllamaError(
             f"Unexpected Ollama response format: {completion.model_dump()}"
