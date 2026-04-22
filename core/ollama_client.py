@@ -39,8 +39,10 @@ def chat_with_ollama(
     top_p: Optional[float] = None,
     max_tokens: Optional[int] = None,
     timeout: float = 120.0,
+    response_format: Optional[dict[str, Any]] = None,
+    stream: bool = False,
     options: Optional[dict[str, Any]] = None,
-) -> str:
+) -> Any:
     """
     Send chat messages to Ollama and return assistant text.
 
@@ -73,6 +75,14 @@ def chat_with_ollama(
     options:
         Extra Ollama-native options sent through extra_body. Example:
         {"num_ctx": 4096, "seed": 42}
+
+    response_format:
+        OpenAI-compatible response format passthrough, for example:
+        {"type": "json_object"}
+
+    stream:
+        If True, returns an iterable of streaming chunks.
+        If False (default), returns a single assistant string.
     """
     final_model = model or DEFAULT_OLLAMA_MODEL
     if not final_model:
@@ -105,12 +115,17 @@ def chat_with_ollama(
             top_p=top_p,
             max_tokens=max_tokens,
             timeout=timeout,
+            response_format=response_format,
+            stream=stream,
             extra_body={"options": merged_options} if merged_options else None,
         )
     except (APIError, APITimeoutError) as exc:
         raise OllamaError(f"Failed to connect to Ollama: {exc}") from exc
     except Exception as exc:
         raise OllamaError(f"Ollama request failed: {exc}") from exc
+
+    if stream:
+        return completion
 
     try:
         return completion.choices[0].message.content or ""
