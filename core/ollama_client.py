@@ -155,9 +155,6 @@ def chat_with_ollama(
         raise OllamaError(f"Ollama request failed: {exc}") from exc
 
     if stream:
-        if stream_to_stdout is False:
-            return completion
-
         if render_markdown:
             streamed_text = ""
             display_id: str | None = _display_markdown_notebook("")
@@ -175,7 +172,7 @@ def chat_with_ollama(
                 print()
             return None
 
-        if stream_to_stdout is True:
+        if stream_to_stdout:
             for chunk in completion:
                 delta = ""
                 if chunk.choices and chunk.choices[0].delta:
