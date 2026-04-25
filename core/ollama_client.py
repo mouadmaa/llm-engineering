@@ -58,9 +58,10 @@ def chat_with_ollama(
     max_tokens: Optional[int] = None,
     timeout: float = 180.0,
     response_format: Optional[dict[str, Any]] = None,
-    stream: bool = True,
-    stream_to_stdout: bool = True,
-    render_markdown: bool = True,
+    stream: bool = False,
+    stream_to_yield: bool = True,
+    stream_to_stdout: bool = False,
+    render_markdown: bool = False,
     options: Optional[dict[str, Any]] = None,
 ) -> Any:
     """
@@ -104,10 +105,15 @@ def chat_with_ollama(
         If True, returns an iterable of streaming chunks.
         If False (default), returns a single assistant string.
 
+    stream_to_yield:
+        Controls non-stdout streaming behavior when stream=True and render_markdown=False:
+        - True (default): return an iterator yielding cumulative text deltas
+        - False: return raw OpenAI/Ollama completion stream chunks
+
     stream_to_stdout:
         Stream output control when stream=True and render_markdown=False:
         - True: print streamed tokens and return None
-        - False: return raw stream iterator
+        - False: controlled by stream_to_yield
 
     render_markdown:
         If True (default), render responses as Markdown in notebook environments.
@@ -171,6 +177,16 @@ def chat_with_ollama(
             if display_id is None:
                 print()
             return None
+
+        if stream_to_yield:
+            def _yield_cumulative_delta() -> Any:
+                delta = ""
+                for chunk in completion:
+                    if chunk.choices and chunk.choices[0].delta:
+                        delta += chunk.choices[0].delta.content or ""
+                    yield delta
+
+            return _yield_cumulative_delta()
 
         if stream_to_stdout:
             for chunk in completion:
