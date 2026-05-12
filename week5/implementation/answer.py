@@ -1,34 +1,37 @@
 from pathlib import Path
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_ollama import ChatOllama
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
+# from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+# from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.messages import SystemMessage, HumanMessage, convert_to_messages
 from langchain_core.documents import Document
-
 from dotenv import load_dotenv
 
 
 load_dotenv(override=True)
 
-MODEL = "gpt-4.1-nano"
+# MODEL = "gpt-4.1-nano"
+MODEL = "llama3.1:8b"
 DB_NAME = str(Path(__file__).parent.parent / "vector_db")
 
-# embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+# embeddings = OpenAIEmbeddings(model="text-embedding-3-large")
+embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 RETRIEVAL_K = 10
 
 SYSTEM_PROMPT = """
-You are a knowledgeable, friendly assistant representing the company Insurellm.
-You are chatting with a user about Insurellm.
-If relevant, use the given context to answer any question.
-If you don't know the answer, say so.
-Context:
-{context}
+    You are a knowledgeable, friendly assistant representing the company Insurellm.
+    You are chatting with a user about Insurellm.
+    If relevant, use the given context to answer any question.
+    If you don't know the answer, say so.
+
+    Context:
+    {context}
 """
 
 vectorstore = Chroma(persist_directory=DB_NAME, embedding_function=embeddings)
 retriever = vectorstore.as_retriever()
-llm = ChatOpenAI(temperature=0, model_name=MODEL)
+llm = ChatOllama(model=MODEL, temperature=0)
 
 
 def fetch_context(question: str) -> list[Document]:
